@@ -1,6 +1,5 @@
 """Use case for transforming Apoia-se supporter data into summary artifacts."""
 
-import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -53,18 +52,30 @@ class TransformApoiadoresUseCase:
 
         Returns:
             Tuple of (yaml_path, json_path) for the generated artifacts.
+
+        Raises:
+            FileNotFoundError: If the CSV file does not exist.
         """
+        if not csv_path.exists():
+            raise FileNotFoundError(
+                f"CSV file not found: {csv_path}. "
+                "Please place the Apoia-se export CSV in the data/ folder."
+            )
+
         if reference_date is None:
             reference_date = datetime.now()
 
         apoiadores = self._reader.read(csv_path)
         summary = self._build_summary(apoiadores, reference_date)
 
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Build date-based output directory with serial number
+        date_str = reference_date.strftime("%Y-%m-%d")
+        date_dir = output_dir / date_str
+        date_dir.mkdir(parents=True, exist_ok=True)
 
-        artifact_id = str(uuid.uuid4())
-        yaml_path = output_dir / f"{artifact_id}.yaml"
-        json_path = output_dir / f"{artifact_id}.json"
+        serial = self._next_serial(date_dir)
+        yaml_path = date_dir / f"{serial:03d}.yaml"
+        json_path = date_dir / f"{serial:03d}.json"
 
         yaml_data = self._summary_to_dict(summary)
         self._yaml_writer.write(yaml_data, yaml_path)
@@ -73,6 +84,31 @@ class TransformApoiadoresUseCase:
         self._json_writer.write(metadata, json_path)
 
         return yaml_path, json_path
+
+    @staticmethod
+    def _next_serial(date_dir: Path) -> int:
+        """Determine the next serial number for artifacts in a date folder.
+
+        Scans existing .yaml files and returns max + 1, starting at 1.
+
+        Args:
+            date_dir: The date-specific output directory.
+
+        Returns:
+            Next available serial number.
+        """
+        existing = list(date_dir.glob("*.yaml"))
+        if not existing:
+            return 1
+
+        max_serial = 0
+        for f in existing:
+            try:
+                serial = int(f.stem)
+                max_serial = max(max_serial, serial)
+            except ValueError:
+                continue
+        return max_serial + 1
 
     def _build_summary(
         self, apoiadores: list[Apoiador], reference_date: datetime
@@ -172,8 +208,9 @@ class TransformApoiadoresUseCase:
         Returns:
             Dictionary matching the YAML structure from the spec.
         """
-        recompensas_dict: dict[int, dict[str, str]] = {}
+        recompensas_dict: dict[str, dict[str, str]] = {}
         for recompensa_value, group in sorted(summary.recompensas.items()):
+            pesetas_key = f"{recompensa_value}-pesetas"
             group_dict: dict[str, str] = {}
             if group.apoiadores_com_status_ativo:
                 group_dict["apoiadores_com_status_ativo"] = (
@@ -191,7 +228,7 @@ class TransformApoiadoresUseCase:
                 group_dict["apoiadores_com_status_aguardando_confirmacao"] = (
                     group.apoiadores_com_status_aguardando_confirmacao
                 )
-            recompensas_dict[recompensa_value] = group_dict
+            recompensas_dict[pesetas_key] = group_dict
 
         return {
             "apoia-se": {
