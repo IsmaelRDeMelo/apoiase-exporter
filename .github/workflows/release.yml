@@ -1,0 +1,96 @@
+name: Release — Build & Publish .exe
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. v1.0.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: |
+          pip install polars pyyaml pytest pytest-cov
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v \
+            --cov=src/domain \
+            --cov=src/application \
+            --cov=src/infrastructure \
+            --cov-fail-under=90
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install polars pyyaml customtkinter pyinstaller
+
+      - name: Build .exe with PyInstaller
+        run: python build.py
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ApoiaseExporter
+          path: dist/ApoiaseExporter.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download .exe artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ApoiaseExporter
+          path: dist/
+
+      - name: Determine version tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Apoia-se Exporter ${{ steps.version.outputs.tag }}"
+          body: |
+            ## Apoia-se Exporter ${{ steps.version.outputs.tag }}
+
+            ### Como usar
+            1. Baixe o arquivo `ApoiaseExporter.exe` abaixo
+            2. Abra o executável (não precisa instalar nada)
+            3. Importe o CSV exportado do Apoia-se
+            4. Clique em "Processar" e veja os resultados
+
+            > **Nota:** Não é necessário ter Python instalado.
+          files: dist/ApoiaseExporter.exe
+          draft: false
+          prerelease: false
