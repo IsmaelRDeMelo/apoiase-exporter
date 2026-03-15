@@ -5,3 +5,6 @@ artifacts/
 .pytest_cache/
 htmlcov/
 .coverage
+build/
+dist/
+*.spec
