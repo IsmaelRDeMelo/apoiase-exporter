@@ -24,11 +24,99 @@ COLORS = {
 }
 
 
+class SplashScreen(ctk.CTkToplevel):
+    """Loading splash screen shown while the main app initializes."""
+
+    def __init__(self, parent: ctk.CTk) -> None:
+        super().__init__(parent)
+
+        # -- Borderless, always on top --
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.configure(fg_color=COLORS["bg_dark"])
+
+        # -- Size and centering --
+        width, height = 420, 260
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - width) // 2
+        y = (screen_h - height) // 2
+        self.geometry(f"{width}x{height}+{x}+{y}")
+
+        # -- Outer border frame --
+        border = ctk.CTkFrame(
+            self,
+            fg_color=COLORS["bg_card"],
+            corner_radius=16,
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        border.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # -- App icon --
+        icon_label = ctk.CTkLabel(
+            border,
+            text="⚡",
+            font=ctk.CTkFont(size=48),
+        )
+        icon_label.pack(pady=(32, 8))
+
+        # -- Title --
+        title = ctk.CTkLabel(
+            border,
+            text="APOIA-SE EXPORTER",
+            font=ctk.CTkFont(family="Segoe UI", size=22, weight="bold"),
+            text_color=COLORS["accent"],
+        )
+        title.pack(pady=(0, 4))
+
+        # -- Version --
+        version = ctk.CTkLabel(
+            border,
+            text="v0.2.0",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=COLORS["text_muted"],
+        )
+        version.pack(pady=(0, 16))
+
+        # -- Loading text --
+        self._status = ctk.CTkLabel(
+            border,
+            text="Carregando...",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=COLORS["text_secondary"],
+        )
+        self._status.pack(pady=(0, 8))
+
+        # -- Progress bar (indeterminate) --
+        self._progress = ctk.CTkProgressBar(
+            border,
+            width=300,
+            height=6,
+            fg_color=COLORS["bg_input"],
+            progress_color=COLORS["accent"],
+            corner_radius=3,
+            mode="indeterminate",
+        )
+        self._progress.pack(pady=(0, 24))
+        self._progress.start()
+
+        # Force rendering
+        self.update_idletasks()
+        self.update()
+
+
 class ApoiaseApp(ctk.CTk):
     """Main GUI application for the Apoia-se Exporter."""
 
     def __init__(self) -> None:
         super().__init__()
+
+        # -- Hide main window while loading --
+        self.withdraw()
+
+        # -- Show splash screen --
+        self._splash = SplashScreen(self)
 
         # -- Window config --
         self.title("Apoia-se Exporter")
@@ -65,6 +153,16 @@ class ApoiaseApp(ctk.CTk):
         self.import_tab = ImportTab(tab_import, COLORS, self._on_process_done)
         self.dashboard_tab = DashboardTab(tab_dashboard, COLORS)
         self.search_tab = SearchTab(tab_search, COLORS)
+
+        # -- Dismiss splash and show main window --
+        self.after(200, self._dismiss_splash)
+
+    def _dismiss_splash(self) -> None:
+        """Destroy splash screen and show the main window."""
+        if hasattr(self, "_splash") and self._splash is not None:
+            self._splash.destroy()
+            self._splash = None
+        self.deiconify()
 
     def _build_header(self) -> None:
         """Build the top header bar."""

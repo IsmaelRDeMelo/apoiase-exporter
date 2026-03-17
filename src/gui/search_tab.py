@@ -22,9 +22,13 @@ class SearchTab:
 
         parent.configure(fg_color=colors["bg_dark"])
 
+        # -- Persistent wrapper --
+        self._wrapper = ctk.CTkFrame(parent, fg_color=colors["bg_dark"])
+        self._wrapper.pack(fill="both", expand=True)
+
         # -- Placeholder --
         self._placeholder = ctk.CTkLabel(
-            parent,
+            self._wrapper,
             text="Importe um CSV primeiro para buscar apoiadores",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             text_color=colors["text_muted"],
@@ -33,6 +37,13 @@ class SearchTab:
 
         self._built = False
 
+    def _clear_wrapper(self) -> None:
+        """Destroy all children inside the wrapper frame."""
+        for child in self._wrapper.winfo_children():
+            child.pack_forget()
+            child.place_forget()
+            child.destroy()
+
     def populate(self, metadata: list[dict[str, str]]) -> None:
         """Populate the search tab with metadata.
 
@@ -40,9 +51,10 @@ class SearchTab:
             metadata: List of dicts with id, nome, email.
         """
         self._all_data = metadata
-        self._placeholder.destroy()
 
         if not self._built:
+            # First time: remove placeholder and build UI
+            self._clear_wrapper()
             self._build_ui()
             self._built = True
 
@@ -52,7 +64,7 @@ class SearchTab:
         """Build the search bar and results table."""
         # -- Search bar --
         search_frame = ctk.CTkFrame(
-            self._parent,
+            self._wrapper,
             fg_color=self._colors["bg_card"],
             corner_radius=12,
         )
@@ -92,7 +104,7 @@ class SearchTab:
 
         # -- Results table (using ttk.Treeview for performance) --
         table_frame = ctk.CTkFrame(
-            self._parent,
+            self._wrapper,
             fg_color=self._colors["bg_card"],
             corner_radius=12,
         )

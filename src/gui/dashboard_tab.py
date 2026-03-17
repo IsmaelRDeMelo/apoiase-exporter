@@ -17,16 +17,25 @@ class DashboardTab:
         self._parent = parent
         parent.configure(fg_color=colors["bg_dark"])
 
+        # -- Persistent wrapper that holds either placeholder or content --
+        self._wrapper = ctk.CTkFrame(parent, fg_color=colors["bg_dark"])
+        self._wrapper.pack(fill="both", expand=True)
+
         # -- Placeholder --
         self._placeholder = ctk.CTkLabel(
-            parent,
+            self._wrapper,
             text="Importe um CSV primeiro para ver os resultados",
             font=ctk.CTkFont(family="Segoe UI", size=14),
             text_color=colors["text_muted"],
         )
         self._placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
-        self._content_frame: ctk.CTkScrollableFrame | None = None
+    def _clear_wrapper(self) -> None:
+        """Destroy all children inside the wrapper frame."""
+        for child in self._wrapper.winfo_children():
+            child.pack_forget()
+            child.place_forget()
+            child.destroy()
 
     def populate(self, yaml_data: dict) -> None:
         """Populate the dashboard with processed data.
@@ -34,26 +43,25 @@ class DashboardTab:
         Args:
             yaml_data: The YAML summary dict from the use case.
         """
-        self._placeholder.destroy()
+        # Nuke everything inside wrapper (placeholder or previous content)
+        self._clear_wrapper()
 
-        if self._content_frame is not None:
-            self._content_frame.destroy()
-
-        self._content_frame = ctk.CTkScrollableFrame(
-            self._parent,
+        # Create scrollable content inside wrapper
+        content = ctk.CTkScrollableFrame(
+            self._wrapper,
             fg_color=self._colors["bg_dark"],
             corner_radius=0,
         )
-        self._content_frame.pack(fill="both", expand=True, padx=0, pady=0)
+        content.pack(fill="both", expand=True, padx=0, pady=0)
 
         apoia = yaml_data.get("apoia-se", {})
 
         # -- Stats cards --
-        self._build_stats_row(apoia)
+        self._build_stats_row(content, apoia)
 
         # -- Divider --
         divider = ctk.CTkFrame(
-            self._content_frame,
+            content,
             fg_color=self._colors["border"],
             height=1,
         )
@@ -61,7 +69,7 @@ class DashboardTab:
 
         # -- Section title --
         section = ctk.CTkLabel(
-            self._content_frame,
+            content,
             text="Recompensas por categoria",
             font=ctk.CTkFont(family="Segoe UI", size=16, weight="bold"),
             text_color=self._colors["text_primary"],
@@ -72,12 +80,14 @@ class DashboardTab:
         # -- Reward tier cards --
         recompensas = apoia.get("recompensas", {})
         for tier_key, groups in recompensas.items():
-            self._build_tier_card(tier_key, groups)
+            self._build_tier_card(content, tier_key, groups)
 
-    def _build_stats_row(self, apoia: dict) -> None:
+    def _build_stats_row(
+        self, parent: ctk.CTkScrollableFrame, apoia: dict
+    ) -> None:
         """Build the row of statistics cards."""
         stats_frame = ctk.CTkFrame(
-            self._content_frame,
+            parent,
             fg_color=self._colors["bg_dark"],
         )
         stats_frame.pack(fill="x", padx=16, pady=(16, 0))
@@ -120,15 +130,21 @@ class DashboardTab:
             )
             desc_label.pack(padx=12, pady=(0, 12))
 
-    def _build_tier_card(self, tier_key: str, groups: dict) -> None:
+    def _build_tier_card(
+        self,
+        parent: ctk.CTkScrollableFrame,
+        tier_key: str,
+        groups: dict,
+    ) -> None:
         """Build a single reward tier card with status groups.
 
         Args:
+            parent: Scrollable content frame to add the card to.
             tier_key: The tier key (e.g. '5-pesetas').
             groups: Dict of status groups with name lists.
         """
         card = ctk.CTkFrame(
-            self._content_frame,
+            parent,
             fg_color=self._colors["bg_card"],
             corner_radius=12,
             border_width=1,
