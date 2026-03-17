@@ -19,6 +19,7 @@ class SearchTab:
         self._colors = colors
         self._parent = parent
         self._all_data: list[dict[str, str]] = []
+        self._placeholder_visible = True
 
         parent.configure(fg_color=colors["bg_dark"])
 
@@ -40,7 +41,11 @@ class SearchTab:
             metadata: List of dicts with id, nome, email.
         """
         self._all_data = metadata
-        self._placeholder.destroy()
+
+        # Destroy placeholder only on first populate
+        if self._placeholder_visible:
+            self._placeholder.destroy()
+            self._placeholder_visible = False
 
         if not self._built:
             self._build_ui()

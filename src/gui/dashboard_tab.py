@@ -15,6 +15,7 @@ class DashboardTab:
         """
         self._colors = colors
         self._parent = parent
+        self._placeholder_visible = True
         parent.configure(fg_color=colors["bg_dark"])
 
         # -- Placeholder --
@@ -34,10 +35,15 @@ class DashboardTab:
         Args:
             yaml_data: The YAML summary dict from the use case.
         """
-        self._placeholder.destroy()
+        # Destroy placeholder only on first populate
+        if self._placeholder_visible:
+            self._placeholder.destroy()
+            self._placeholder_visible = False
 
+        # Destroy previous content frame for clean refresh
         if self._content_frame is not None:
             self._content_frame.destroy()
+            self._content_frame = None
 
         self._content_frame = ctk.CTkScrollableFrame(
             self._parent,
