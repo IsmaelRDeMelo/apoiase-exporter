@@ -1,4 +1,4 @@
-"""Import tab — CSV file picker and processing trigger."""
+"""Import tab — CSV file picker, days filter, and processing trigger."""
 
 import threading
 from pathlib import Path
@@ -96,7 +96,46 @@ class ImportTab:
             font=ctk.CTkFont(family="Segoe UI", size=11),
             text_color=colors["text_secondary"],
         )
-        self._info_label.pack(pady=(0, 20))
+        self._info_label.pack(pady=(0, 16))
+
+        # -- Days filter row --
+        filter_frame = ctk.CTkFrame(container, fg_color=colors["bg_card"], corner_radius=12)
+        filter_frame.pack(fill="x", padx=20, pady=(0, 16))
+
+        filter_label = ctk.CTkLabel(
+            filter_frame,
+            text="📅  Filtro de dias (apoiadores ativos recentes):",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=colors["text_secondary"],
+            anchor="w",
+        )
+        filter_label.pack(side="left", padx=16, pady=12)
+
+        self._days_var = ctk.StringVar(value="30")
+        self._days_menu = ctk.CTkOptionMenu(
+            filter_frame,
+            variable=self._days_var,
+            values=["10", "15", "30", "45", "60"],
+            font=ctk.CTkFont(family="Segoe UI", size=12, weight="bold"),
+            fg_color=colors["accent"],
+            button_color=colors["accent_dim"],
+            button_hover_color=colors["accent_hover"],
+            text_color="#0D0D0D",
+            dropdown_fg_color=colors["bg_card"],
+            dropdown_text_color=colors["text_primary"],
+            dropdown_hover_color=colors["accent_dim"],
+            corner_radius=8,
+            width=80,
+        )
+        self._days_menu.pack(side="right", padx=12, pady=10)
+
+        days_suffix = ctk.CTkLabel(
+            filter_frame,
+            text="dias",
+            font=ctk.CTkFont(family="Segoe UI", size=12),
+            text_color=colors["text_secondary"],
+        )
+        days_suffix.pack(side="right", padx=(0, 4), pady=12)
 
         # -- Process button --
         self._process_btn = ctk.CTkButton(
@@ -161,6 +200,8 @@ class ImportTab:
             text_color=self._colors["accent"],
         )
 
+        days_filter = int(self._days_var.get())
+
         def _run() -> None:
             try:
                 reader = PolarsCSVReader()
@@ -174,15 +215,13 @@ class ImportTab:
                 from datetime import datetime
 
                 ref = datetime.now()
-                summary = uc._build_summary(apoiadores, ref)
+                summary = uc._build_summary(apoiadores, ref, days_filter)
                 yaml_data = uc._summary_to_dict(summary)
                 metadata = uc._build_metadata(apoiadores)
 
                 # Also save artifacts to disk
-                from pathlib import Path as P
-
                 artifacts_dir = self._csv_path.parent / "artifacts"
-                uc.execute(self._csv_path, artifacts_dir, ref)  # type: ignore
+                uc.execute(self._csv_path, artifacts_dir, ref, days_filter)  # type: ignore
 
                 # Callback on main thread
                 self._process_btn.after(0, lambda: self._finish_ok(yaml_data, metadata))

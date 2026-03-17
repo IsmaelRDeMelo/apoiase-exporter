@@ -28,6 +28,7 @@ class RecompensaGroup:
     apoiadores_com_status_pendente: str = ""
     apoiadores_com_status_inadimplente: str = ""
     apoiadores_com_status_aguardando_confirmacao: str = ""
+    apoiadores_ativos_ultimos_n_dias: str = ""
 
 
 @dataclass
@@ -39,4 +40,6 @@ class ApoiaSummary:
     total_inadimplente: int = 0
     total_recebido_mes_atual: float = 0.0
     total_recebido_mes_anterior: float = 0.0
+    total_ativos_recentes: int = 0
+    dias_filtro: int = 30
     recompensas: dict[int, RecompensaGroup] = field(default_factory=dict)
