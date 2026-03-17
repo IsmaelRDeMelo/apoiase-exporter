@@ -461,7 +461,7 @@ class TestActiveRecent:
     def test_ativos_recentes_includes_all_statuses_within_period(
         self, tmp_path: Path
     ) -> None:
-        """All statuses within N days are counted as active recent."""
+        """Ativo always included; other statuses only within N days."""
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
@@ -487,29 +487,29 @@ class TestActiveRecent:
                 nome="Old Supporter",
                 status="Ativo",
                 recompensa=5,
-                data_ultima_mudanca=datetime(2025, 12, 1),  # > 30 days ago
+                data_ultima_mudanca=datetime(2025, 12, 1),  # > 30 days ago, but Ativo = always in
             ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, ref, days_filter=30)
 
         result = yaml_writer.written_data
-        assert result["apoia-se"]["total_ativos_recentes"] == 3
+        # All 4: Ativo always included regardless of date, other 2 within period
+        assert result["apoia-se"]["total_ativos_recentes"] == 4
 
         recompensas = result["apoia-se"]["recompensas"]
         recent_names = recompensas["5-pesetas"][
             "apoiadores_ativos_ultimos_n_dias"
         ]
-        # Sorted by date oldest first
         assert "Ativo Recent" in recent_names
         assert "Desativado Recent" in recent_names
         assert "Inadimplente Recent" in recent_names
-        assert "Old Supporter" not in recent_names
+        assert "Old Supporter" in recent_names  # Ativo = always included
 
     def test_ativos_recentes_respects_days_filter(
         self, tmp_path: Path
     ) -> None:
-        """Custom days_filter narrows the window."""
+        """Ativo is always included regardless of days_filter."""
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
@@ -523,6 +523,12 @@ class TestActiveRecent:
                 nome="Semi Recent",
                 status="Ativo",
                 recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),  # 13 days ago, but Ativo = always in
+            ),
+            _make_apoiador(
+                nome="Old Desativado",
+                status="Desativado",
+                recompensa=5,
                 data_ultima_mudanca=datetime(2026, 3, 1),  # 13 days ago -> outside 10-day window
             ),
         ]
@@ -530,12 +536,12 @@ class TestActiveRecent:
         uc.execute(csv_path, tmp_path, ref, days_filter=10)
 
         result = yaml_writer.written_data
-        # Only "Very Recent" is within 10 days; "Semi Recent" (13 days ago) is excluded
-        assert result["apoia-se"]["total_ativos_recentes"] == 1
+        # Both Ativo included; Desativado outside window excluded
+        assert result["apoia-se"]["total_ativos_recentes"] == 2
         assert result["apoia-se"]["dias_filtro"] == 10
 
     def test_ativos_recentes_15_days_filter(self, tmp_path: Path) -> None:
-        """15-day filter excludes older supporters."""
+        """Ativo always included; non-Ativo uses 15-day filter."""
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
@@ -546,20 +552,27 @@ class TestActiveRecent:
                 data_ultima_mudanca=datetime(2026, 3, 5),  # 9 days ago
             ),
             _make_apoiador(
-                nome="Old",
+                nome="Old Ativo",
                 status="Ativo",
                 recompensa=5,
-                data_ultima_mudanca=datetime(2026, 2, 20),  # 22 days ago
+                data_ultima_mudanca=datetime(2026, 2, 20),  # 22 days ago, still included
+            ),
+            _make_apoiador(
+                nome="Old Desativado",
+                status="Desativado",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 2, 20),  # 22 days ago, excluded
             ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, ref, days_filter=15)
 
         result = yaml_writer.written_data
-        assert result["apoia-se"]["total_ativos_recentes"] == 1
+        # Both Ativo included; Desativado at 22 days excluded by 15-day window
+        assert result["apoia-se"]["total_ativos_recentes"] == 2
 
     def test_ativos_recentes_60_days_filter(self, tmp_path: Path) -> None:
-        """60-day filter includes more supporters."""
+        """Ativo always included; Desativado uses 60-day filter."""
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
@@ -570,32 +583,45 @@ class TestActiveRecent:
                 data_ultima_mudanca=datetime(2026, 3, 5),
             ),
             _make_apoiador(
-                nome="Older",
+                nome="Old Ativo",
                 status="Ativo",
                 recompensa=5,
-                data_ultima_mudanca=datetime(2026, 2, 1),  # 41 days ago
+                data_ultima_mudanca=datetime(2025, 12, 1),  # 103 days ago, still included
             ),
             _make_apoiador(
-                nome="Very Old",
-                status="Ativo",
+                nome="Desativado Within 60",
+                status="Desativado",
                 recompensa=5,
-                data_ultima_mudanca=datetime(2025, 12, 1),  # 103 days ago
+                data_ultima_mudanca=datetime(2026, 2, 1),  # 41 days ago, within 60d
+            ),
+            _make_apoiador(
+                nome="Desativado Outside 60",
+                status="Desativado",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2025, 12, 1),  # 103 days ago, excluded
             ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, ref, days_filter=60)
 
         result = yaml_writer.written_data
-        assert result["apoia-se"]["total_ativos_recentes"] == 2
+        # 2 Ativo (always) + 1 Desativado within 60d = 3; last Desativado excluded
+        assert result["apoia-se"]["total_ativos_recentes"] == 3
 
-    def test_ativos_recentes_none_date_excluded(self, tmp_path: Path) -> None:
-        """Supporters with None date are excluded from active recent."""
+    def test_ativos_recentes_ativo_none_date_included(self, tmp_path: Path) -> None:
+        """Ativo with None date is included (Ativo is always in active recent)."""
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
             _make_apoiador(
-                nome="No Date",
+                nome="No Date Ativo",
                 status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=None,
+            ),
+            _make_apoiador(
+                nome="No Date Desativado",
+                status="Desativado",
                 recompensa=5,
                 data_ultima_mudanca=None,
             ),
@@ -604,7 +630,8 @@ class TestActiveRecent:
         uc.execute(csv_path, tmp_path, ref)
 
         result = yaml_writer.written_data
-        assert result["apoia-se"]["total_ativos_recentes"] == 0
+        # Ativo with None date is included; Desativado with None date is not
+        assert result["apoia-se"]["total_ativos_recentes"] == 1
 
     def test_ativos_recentes_sorted_by_date(self, tmp_path: Path) -> None:
         """Active recent names are sorted by date (oldest first)."""
