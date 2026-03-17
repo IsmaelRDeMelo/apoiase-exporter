@@ -180,13 +180,17 @@ class TransformApoiadoresUseCase:
                     (display_name, sort_date)
                 )
 
-            # Active recent: ALL statuses within last N days
-            if ap.data_ultima_mudanca is not None:
-                if ap.data_ultima_mudanca >= cutoff_date:
-                    summary.total_ativos_recentes += 1
-                    recent_by_recompensa[ap.recompensa].append(
-                        (display_name, sort_date)
-                    )
+            # Active recent: Ativo always included; other statuses only within N days
+            is_ativo = ap.status == STATUS_ATIVO
+            within_period = (
+                ap.data_ultima_mudanca is not None
+                and ap.data_ultima_mudanca >= cutoff_date
+            )
+            if is_ativo or within_period:
+                summary.total_ativos_recentes += 1
+                recent_by_recompensa[ap.recompensa].append(
+                    (display_name, sort_date)
+                )
 
         # Sort by date (oldest first) and build RecompensaGroup objects
         all_recompensa_keys = set(recompensa_groups.keys()) | set(
