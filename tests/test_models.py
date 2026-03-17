@@ -76,6 +76,7 @@ class TestRecompensaGroup:
         assert group.apoiadores_com_status_pendente == ""
         assert group.apoiadores_com_status_inadimplente == ""
         assert group.apoiadores_com_status_aguardando_confirmacao == ""
+        assert group.apoiadores_ativos_ultimos_n_dias == ""
 
     def test_custom_values(self) -> None:
         """Test creating group with custom values."""
@@ -85,6 +86,13 @@ class TestRecompensaGroup:
         )
         assert group.apoiadores_com_status_ativo == "Alice, Bob"
         assert group.apoiadores_com_status_pendente == "Charlie"
+
+    def test_active_recent_field(self) -> None:
+        """Test the new active-recent field."""
+        group = RecompensaGroup(
+            apoiadores_ativos_ultimos_n_dias="Fabio Akita, Marvin",
+        )
+        assert group.apoiadores_ativos_ultimos_n_dias == "Fabio Akita, Marvin"
 
 
 class TestApoiaSummary:
@@ -98,6 +106,8 @@ class TestApoiaSummary:
         assert summary.total_inadimplente == 0
         assert summary.total_recebido_mes_atual == 0.0
         assert summary.total_recebido_mes_anterior == 0.0
+        assert summary.total_ativos_recentes == 0
+        assert summary.dias_filtro == 30
         assert summary.recompensas == {}
 
     def test_with_recompensas(self) -> None:
@@ -110,3 +120,13 @@ class TestApoiaSummary:
         assert summary.total_apoiadores == 1
         assert 5 in summary.recompensas
         assert summary.recompensas[5].apoiadores_com_status_ativo == "Fabio Akita"
+
+    def test_custom_days_filter(self) -> None:
+        """Test summary with custom days filter."""
+        summary = ApoiaSummary(dias_filtro=15)
+        assert summary.dias_filtro == 15
+
+    def test_active_recent_count(self) -> None:
+        """Test setting active recent count."""
+        summary = ApoiaSummary(total_ativos_recentes=42)
+        assert summary.total_ativos_recentes == 42

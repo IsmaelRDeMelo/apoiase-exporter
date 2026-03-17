@@ -1,12 +1,12 @@
 """Use case for transforming Apoia-se supporter data into summary artifacts."""
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from src.domain.models import ApoiaSummary, Apoiador, RecompensaGroup
-from src.domain.name_utils import extract_short_name
+from src.domain.name_utils import format_display_name
 from src.domain.ports import ArtifactWriterPort, DataReaderPort
 
 # Status constants matching the CSV values
@@ -41,6 +41,7 @@ class TransformApoiadoresUseCase:
         csv_path: Path,
         output_dir: Path,
         reference_date: Optional[datetime] = None,
+        days_filter: int = 30,
     ) -> tuple[Path, Path]:
         """Execute the full ETL pipeline.
 
@@ -49,6 +50,8 @@ class TransformApoiadoresUseCase:
             output_dir: Directory where artifacts will be saved.
             reference_date: Reference date for month calculations.
                 Defaults to now.
+            days_filter: Number of days for the "active recent" filter.
+                Defaults to 30. Allowed: 10, 15, 30, 45, 60.
 
         Returns:
             Tuple of (yaml_path, json_path) for the generated artifacts.
@@ -66,7 +69,7 @@ class TransformApoiadoresUseCase:
             reference_date = datetime.now()
 
         apoiadores = self._reader.read(csv_path)
-        summary = self._build_summary(apoiadores, reference_date)
+        summary = self._build_summary(apoiadores, reference_date, days_filter)
 
         # Build date-based output directory with serial number
         date_str = reference_date.strftime("%Y-%m-%d")
@@ -111,18 +114,22 @@ class TransformApoiadoresUseCase:
         return max_serial + 1
 
     def _build_summary(
-        self, apoiadores: list[Apoiador], reference_date: datetime
+        self,
+        apoiadores: list[Apoiador],
+        reference_date: datetime,
+        days_filter: int = 30,
     ) -> ApoiaSummary:
         """Build the aggregated summary from raw supporter data.
 
         Args:
             apoiadores: List of all supporters.
             reference_date: Date used to determine current/previous month.
+            days_filter: Number of days for the active-recent filter.
 
         Returns:
             ApoiaSummary with all computed fields.
         """
-        summary = ApoiaSummary()
+        summary = ApoiaSummary(dias_filtro=days_filter)
 
         current_month = reference_date.month
         current_year = reference_date.year
@@ -134,9 +141,16 @@ class TransformApoiadoresUseCase:
             prev_month = current_month - 1
             prev_year = current_year
 
-        # Group supporters by recompensa for the reward breakdown
-        recompensa_groups: dict[int, dict[str, list[str]]] = defaultdict(
-            lambda: defaultdict(list)
+        cutoff_date = reference_date - timedelta(days=days_filter)
+
+        # Accumulate (name, date) tuples per recompensa+status for sorting
+        recompensa_groups: dict[int, dict[str, list[tuple[str, datetime]]]] = (
+            defaultdict(lambda: defaultdict(list))
+        )
+
+        # Separate accumulator for the "active recent" virtual status
+        recent_by_recompensa: dict[int, list[tuple[str, datetime]]] = (
+            defaultdict(list)
         )
 
         for ap in apoiadores:
@@ -157,18 +171,48 @@ class TransformApoiadoresUseCase:
                     elif dt.month == prev_month and dt.year == prev_year:
                         summary.total_recebido_mes_anterior += ap.valor
 
-            # Build recompensa groups
-            short_name = extract_short_name(ap.nome)
+            # Build recompensa groups (name, date) for date-based sorting
+            display_name = format_display_name(ap.nome)
             status_key = self._status_to_key(ap.status)
+            sort_date = ap.data_ultima_mudanca or datetime.max
             if status_key:
-                recompensa_groups[ap.recompensa][status_key].append(short_name)
+                recompensa_groups[ap.recompensa][status_key].append(
+                    (display_name, sort_date)
+                )
 
-        # Sort names and build RecompensaGroup objects
-        for recompensa_value, status_dict in sorted(recompensa_groups.items()):
+            # Active recent: ALL statuses within last N days
+            if ap.data_ultima_mudanca is not None:
+                if ap.data_ultima_mudanca >= cutoff_date:
+                    summary.total_ativos_recentes += 1
+                    recent_by_recompensa[ap.recompensa].append(
+                        (display_name, sort_date)
+                    )
+
+        # Sort by date (oldest first) and build RecompensaGroup objects
+        all_recompensa_keys = set(recompensa_groups.keys()) | set(
+            recent_by_recompensa.keys()
+        )
+
+        for recompensa_value in sorted(all_recompensa_keys):
             group = RecompensaGroup()
-            for status_key, names in status_dict.items():
-                sorted_names = sorted(names, key=str.lower)
-                setattr(group, status_key, ", ".join(sorted_names))
+
+            # Standard status groups
+            if recompensa_value in recompensa_groups:
+                status_dict = recompensa_groups[recompensa_value]
+                for status_key, name_date_pairs in status_dict.items():
+                    sorted_pairs = sorted(name_date_pairs, key=lambda x: x[1])
+                    sorted_names = [name for name, _ in sorted_pairs]
+                    setattr(group, status_key, ", ".join(sorted_names))
+
+            # Active recent group
+            if recompensa_value in recent_by_recompensa:
+                pairs = recent_by_recompensa[recompensa_value]
+                sorted_pairs = sorted(pairs, key=lambda x: x[1])
+                sorted_names = [name for name, _ in sorted_pairs]
+                group.apoiadores_ativos_ultimos_n_dias = ", ".join(
+                    sorted_names
+                )
+
             summary.recompensas[recompensa_value] = group
 
         # Round monetary values
@@ -228,6 +272,10 @@ class TransformApoiadoresUseCase:
                 group_dict["apoiadores_com_status_aguardando_confirmacao"] = (
                     group.apoiadores_com_status_aguardando_confirmacao
                 )
+            if group.apoiadores_ativos_ultimos_n_dias:
+                group_dict["apoiadores_ativos_ultimos_n_dias"] = (
+                    group.apoiadores_ativos_ultimos_n_dias
+                )
             recompensas_dict[pesetas_key] = group_dict
 
         return {
@@ -237,6 +285,8 @@ class TransformApoiadoresUseCase:
                 "total_inadimplente": summary.total_inadimplente,
                 "total_recebido_mes_atual": summary.total_recebido_mes_atual,
                 "total_recebido_mes_anterior": summary.total_recebido_mes_anterior,
+                "total_ativos_recentes": summary.total_ativos_recentes,
+                "dias_filtro": summary.dias_filtro,
                 "recompensas": recompensas_dict,
             }
         }

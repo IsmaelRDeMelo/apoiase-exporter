@@ -90,7 +90,9 @@ class TestCSVValidation:
     def test_existing_csv_does_not_raise(self, tmp_path: Path) -> None:
         """No error when CSV exists."""
         csv_path = _make_csv_fixture(tmp_path)
-        uc, _, _ = _make_use_case([_make_apoiador()])
+        uc, _, _ = _make_use_case(
+            [_make_apoiador(data_ultima_mudanca=datetime(2026, 3, 1))]
+        )
 
         # Should not raise
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -103,10 +105,10 @@ class TestTransformUseCase:
         """total_apoiadores counts only 'Ativo' status."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(status="Ativo"),
-            _make_apoiador(status="Ativo"),
-            _make_apoiador(status="Desativado"),
-            _make_apoiador(status="Inadimplente"),
+            _make_apoiador(status="Ativo", data_ultima_mudanca=datetime(2026, 3, 1)),
+            _make_apoiador(status="Ativo", data_ultima_mudanca=datetime(2026, 3, 2)),
+            _make_apoiador(status="Desativado", data_ultima_mudanca=datetime(2026, 3, 1)),
+            _make_apoiador(status="Inadimplente", data_ultima_mudanca=datetime(2026, 3, 1)),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -118,9 +120,15 @@ class TestTransformUseCase:
         """total_pendente counts 'Aguardando Confirmação' status."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(status="Aguardando Confirmação"),
-            _make_apoiador(status="Aguardando Confirmação"),
-            _make_apoiador(status="Ativo"),
+            _make_apoiador(
+                status="Aguardando Confirmação",
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
+            _make_apoiador(
+                status="Aguardando Confirmação",
+                data_ultima_mudanca=datetime(2026, 3, 2),
+            ),
+            _make_apoiador(status="Ativo", data_ultima_mudanca=datetime(2026, 3, 1)),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -132,8 +140,11 @@ class TestTransformUseCase:
         """total_inadimplente counts 'Inadimplente' status."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(status="Inadimplente"),
-            _make_apoiador(status="Ativo"),
+            _make_apoiador(
+                status="Inadimplente",
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
+            _make_apoiador(status="Ativo", data_ultima_mudanca=datetime(2026, 3, 1)),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -146,10 +157,22 @@ class TestTransformUseCase:
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
-            _make_apoiador(status="Ativo", valor=10.0, data_ultima_mudanca=datetime(2026, 3, 1)),
-            _make_apoiador(status="Aguardando Confirmação", valor=5.0, data_ultima_mudanca=datetime(2026, 3, 5)),
-            _make_apoiador(status="Ativo", valor=20.0, data_ultima_mudanca=datetime(2026, 2, 15)),
-            _make_apoiador(status="Desativado", valor=100.0, data_ultima_mudanca=datetime(2026, 3, 1)),
+            _make_apoiador(
+                status="Ativo", valor=10.0, data_ultima_mudanca=datetime(2026, 3, 1)
+            ),
+            _make_apoiador(
+                status="Aguardando Confirmação",
+                valor=5.0,
+                data_ultima_mudanca=datetime(2026, 3, 5),
+            ),
+            _make_apoiador(
+                status="Ativo", valor=20.0, data_ultima_mudanca=datetime(2026, 2, 15)
+            ),
+            _make_apoiador(
+                status="Desativado",
+                valor=100.0,
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, ref)
@@ -162,9 +185,17 @@ class TestTransformUseCase:
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 3, 14)
         apoiadores = [
-            _make_apoiador(status="Ativo", valor=20.0, data_ultima_mudanca=datetime(2026, 2, 15)),
-            _make_apoiador(status="Aguardando Confirmação", valor=15.0, data_ultima_mudanca=datetime(2026, 2, 1)),
-            _make_apoiador(status="Ativo", valor=10.0, data_ultima_mudanca=datetime(2026, 3, 1)),
+            _make_apoiador(
+                status="Ativo", valor=20.0, data_ultima_mudanca=datetime(2026, 2, 15)
+            ),
+            _make_apoiador(
+                status="Aguardando Confirmação",
+                valor=15.0,
+                data_ultima_mudanca=datetime(2026, 2, 1),
+            ),
+            _make_apoiador(
+                status="Ativo", valor=10.0, data_ultima_mudanca=datetime(2026, 3, 1)
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, ref)
@@ -177,7 +208,11 @@ class TestTransformUseCase:
         csv_path = _make_csv_fixture(tmp_path)
         ref = datetime(2026, 1, 15)
         apoiadores = [
-            _make_apoiador(status="Ativo", valor=50.0, data_ultima_mudanca=datetime(2025, 12, 20)),
+            _make_apoiador(
+                status="Ativo",
+                valor=50.0,
+                data_ultima_mudanca=datetime(2025, 12, 20),
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, ref)
@@ -185,14 +220,36 @@ class TestTransformUseCase:
         result = yaml_writer.written_data
         assert result["apoia-se"]["total_recebido_mes_anterior"] == 50.0
 
-    def test_recompensas_grouping_with_pesetas_key(self, tmp_path: Path) -> None:
-        """Groups supporters by recompensa with pesetas keys and init-cap sorted names."""
+    def test_recompensas_sorted_by_date_oldest_first(
+        self, tmp_path: Path
+    ) -> None:
+        """Names are sorted by date (oldest first), not alphabetically."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(nome="zoe silva", status="Ativo", recompensa=5),
-            _make_apoiador(nome="alice santos", status="Ativo", recompensa=5),
-            _make_apoiador(nome="BOB LIMA", status="Inadimplente", recompensa=5),
-            _make_apoiador(nome="Carol Dias", status="Ativo", recompensa=18),
+            _make_apoiador(
+                nome="zoe silva",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 1, 10),  # oldest
+            ),
+            _make_apoiador(
+                nome="alice santos",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 5),  # newest
+            ),
+            _make_apoiador(
+                nome="BOB LIMA",
+                status="Inadimplente",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 2, 15),
+            ),
+            _make_apoiador(
+                nome="Carol Dias",
+                status="Ativo",
+                recompensa=18,
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -200,11 +257,48 @@ class TestTransformUseCase:
         recompensas = yaml_writer.written_data["apoia-se"]["recompensas"]
 
         assert "5-pesetas" in recompensas
-        assert recompensas["5-pesetas"]["apoiadores_com_status_ativo"] == "Alice Santos, Zoe Silva"
-        assert recompensas["5-pesetas"]["apoiadores_com_status_inadimplente"] == "Bob Lima"
+        # Zoe is oldest (Jan 10), Alice is newest (Mar 5) → Zoe first
+        assert (
+            recompensas["5-pesetas"]["apoiadores_com_status_ativo"]
+            == "Zoe Silva, Alice Santos"
+        )
+        assert (
+            recompensas["5-pesetas"]["apoiadores_com_status_inadimplente"]
+            == "Bob Lima"
+        )
 
         assert "18-pesetas" in recompensas
-        assert recompensas["18-pesetas"]["apoiadores_com_status_ativo"] == "Carol Dias"
+        assert (
+            recompensas["18-pesetas"]["apoiadores_com_status_ativo"]
+            == "Carol Dias"
+        )
+
+    def test_none_dates_sorted_last(self, tmp_path: Path) -> None:
+        """Supporters with None dates are placed at the end of the list."""
+        csv_path = _make_csv_fixture(tmp_path)
+        apoiadores = [
+            _make_apoiador(
+                nome="Alice",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=None,  # goes to end
+            ),
+            _make_apoiador(
+                nome="Bob",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 1, 10),
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
+
+        recompensas = yaml_writer.written_data["apoia-se"]["recompensas"]
+        # Bob (Jan 10) first, Alice (None → last)
+        assert (
+            recompensas["5-pesetas"]["apoiadores_com_status_ativo"]
+            == "Bob, Alice"
+        )
 
     def test_metadata_json_output(self, tmp_path: Path) -> None:
         """JSON metadata contains id, nome, email for all supporters."""
@@ -224,7 +318,9 @@ class TestTransformUseCase:
     def test_artifact_paths_use_date_serial(self, tmp_path: Path) -> None:
         """Generated artifact paths use date/serial format."""
         csv_path = _make_csv_fixture(tmp_path)
-        uc, _, _ = _make_use_case([_make_apoiador()])
+        uc, _, _ = _make_use_case(
+            [_make_apoiador(data_ultima_mudanca=datetime(2026, 3, 1))]
+        )
         ref = datetime(2026, 3, 14)
 
         yaml_path, json_path = uc.execute(csv_path, tmp_path, ref)
@@ -239,7 +335,9 @@ class TestTransformUseCase:
         from src.infrastructure.json_writer import JSONArtifactWriter
 
         csv_path = _make_csv_fixture(tmp_path)
-        reader = MockReader([_make_apoiador()])
+        reader = MockReader(
+            [_make_apoiador(data_ultima_mudanca=datetime(2026, 3, 1))]
+        )
         yaml_writer = YAMLArtifactWriter()
         json_writer = JSONArtifactWriter()
         uc = TransformApoiadoresUseCase(reader, yaml_writer, json_writer)
@@ -251,12 +349,18 @@ class TestTransformUseCase:
         assert yaml1.name == "001.yaml"
         assert yaml2.name == "002.yaml"
 
-    def test_desativado_not_counted(self, tmp_path: Path) -> None:
-        """Desativado status is not counted in any total."""
+    def test_desativado_not_counted_in_standard_totals(
+        self, tmp_path: Path
+    ) -> None:
+        """Desativado status is not counted in standard totals."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(status="Desativado"),
-            _make_apoiador(status="Desativado"),
+            _make_apoiador(
+                status="Desativado", data_ultima_mudanca=datetime(2026, 3, 1)
+            ),
+            _make_apoiador(
+                status="Desativado", data_ultima_mudanca=datetime(2026, 3, 2)
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -270,7 +374,9 @@ class TestTransformUseCase:
         """Supporters with None date are not counted in monthly totals."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(status="Ativo", valor=10.0, data_ultima_mudanca=None),
+            _make_apoiador(
+                status="Ativo", valor=10.0, data_ultima_mudanca=None
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -283,7 +389,12 @@ class TestTransformUseCase:
         """Empty status groups are omitted from recompensa output."""
         csv_path = _make_csv_fixture(tmp_path)
         apoiadores = [
-            _make_apoiador(nome="Alice", status="Ativo", recompensa=5),
+            _make_apoiador(
+                nome="Alice",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
         ]
         uc, yaml_writer, _ = _make_use_case(apoiadores)
         uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
@@ -295,11 +406,265 @@ class TestTransformUseCase:
     def test_execute_without_reference_date(self, tmp_path: Path) -> None:
         """Execute without reference_date uses current date (doesn't crash)."""
         csv_path = _make_csv_fixture(tmp_path)
-        uc, _, _ = _make_use_case([_make_apoiador()])
+        uc, _, _ = _make_use_case(
+            [_make_apoiador(data_ultima_mudanca=datetime(2026, 3, 1))]
+        )
 
         yaml_path, json_path = uc.execute(csv_path, tmp_path)
         # Should produce files under today's date dir
         assert yaml_path.parent.name  # Has a date dir name
+
+    def test_name_formatting_with_particles(self, tmp_path: Path) -> None:
+        """Names with particles are formatted correctly in output."""
+        csv_path = _make_csv_fixture(tmp_path)
+        apoiadores = [
+            _make_apoiador(
+                nome="Antonio Ismael Rodrigues de Melo",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
+
+        recompensas = yaml_writer.written_data["apoia-se"]["recompensas"]
+        assert (
+            recompensas["5-pesetas"]["apoiadores_com_status_ativo"]
+            == "Antonio I. R. Melo"
+        )
+
+    def test_name_formatting_abbreviated_middle(self, tmp_path: Path) -> None:
+        """Names with middles are abbreviated in output."""
+        csv_path = _make_csv_fixture(tmp_path)
+        apoiadores = [
+            _make_apoiador(
+                nome="João Pedro Diniz",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, datetime(2026, 3, 14))
+
+        recompensas = yaml_writer.written_data["apoia-se"]["recompensas"]
+        assert (
+            recompensas["5-pesetas"]["apoiadores_com_status_ativo"]
+            == "João P. Diniz"
+        )
+
+
+class TestActiveRecent:
+    """Tests for the 'Apoiadores Ativos Últimos N Dias' feature."""
+
+    def test_ativos_recentes_includes_all_statuses_within_period(
+        self, tmp_path: Path
+    ) -> None:
+        """All statuses within N days are counted as active recent."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="Ativo Recent",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),  # 13 days ago
+            ),
+            _make_apoiador(
+                nome="Desativado Recent",
+                status="Desativado",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 10),  # 4 days ago
+            ),
+            _make_apoiador(
+                nome="Inadimplente Recent",
+                status="Inadimplente",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 5),  # 9 days ago
+            ),
+            _make_apoiador(
+                nome="Old Supporter",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2025, 12, 1),  # > 30 days ago
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref, days_filter=30)
+
+        result = yaml_writer.written_data
+        assert result["apoia-se"]["total_ativos_recentes"] == 3
+
+        recompensas = result["apoia-se"]["recompensas"]
+        recent_names = recompensas["5-pesetas"][
+            "apoiadores_ativos_ultimos_n_dias"
+        ]
+        # Sorted by date oldest first
+        assert "Ativo Recent" in recent_names
+        assert "Desativado Recent" in recent_names
+        assert "Inadimplente Recent" in recent_names
+        assert "Old Supporter" not in recent_names
+
+    def test_ativos_recentes_respects_days_filter(
+        self, tmp_path: Path
+    ) -> None:
+        """Custom days_filter narrows the window."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="Very Recent",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 10),  # 4 days ago
+            ),
+            _make_apoiador(
+                nome="Semi Recent",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),  # 13 days ago -> outside 10-day window
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref, days_filter=10)
+
+        result = yaml_writer.written_data
+        # Only "Very Recent" is within 10 days; "Semi Recent" (13 days ago) is excluded
+        assert result["apoia-se"]["total_ativos_recentes"] == 1
+        assert result["apoia-se"]["dias_filtro"] == 10
+
+    def test_ativos_recentes_15_days_filter(self, tmp_path: Path) -> None:
+        """15-day filter excludes older supporters."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="Recent",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 5),  # 9 days ago
+            ),
+            _make_apoiador(
+                nome="Old",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 2, 20),  # 22 days ago
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref, days_filter=15)
+
+        result = yaml_writer.written_data
+        assert result["apoia-se"]["total_ativos_recentes"] == 1
+
+    def test_ativos_recentes_60_days_filter(self, tmp_path: Path) -> None:
+        """60-day filter includes more supporters."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="Recent",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 5),
+            ),
+            _make_apoiador(
+                nome="Older",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 2, 1),  # 41 days ago
+            ),
+            _make_apoiador(
+                nome="Very Old",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2025, 12, 1),  # 103 days ago
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref, days_filter=60)
+
+        result = yaml_writer.written_data
+        assert result["apoia-se"]["total_ativos_recentes"] == 2
+
+    def test_ativos_recentes_none_date_excluded(self, tmp_path: Path) -> None:
+        """Supporters with None date are excluded from active recent."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="No Date",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=None,
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref)
+
+        result = yaml_writer.written_data
+        assert result["apoia-se"]["total_ativos_recentes"] == 0
+
+    def test_ativos_recentes_sorted_by_date(self, tmp_path: Path) -> None:
+        """Active recent names are sorted by date (oldest first)."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="Charlie",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 10),  # newest
+            ),
+            _make_apoiador(
+                nome="Alice",
+                status="Ativo",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 2, 20),  # oldest
+            ),
+            _make_apoiador(
+                nome="Bob",
+                status="Desativado",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 1),  # middle
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref)
+
+        recompensas = yaml_writer.written_data["apoia-se"]["recompensas"]
+        recent = recompensas["5-pesetas"]["apoiadores_ativos_ultimos_n_dias"]
+        assert recent == "Alice, Bob, Charlie"
+
+    def test_dias_filtro_in_output(self, tmp_path: Path) -> None:
+        """days_filter value is present in YAML output."""
+        csv_path = _make_csv_fixture(tmp_path)
+        uc, yaml_writer, _ = _make_use_case(
+            [_make_apoiador(data_ultima_mudanca=datetime(2026, 3, 1))]
+        )
+        uc.execute(csv_path, tmp_path, datetime(2026, 3, 14), days_filter=45)
+
+        result = yaml_writer.written_data
+        assert result["apoia-se"]["dias_filtro"] == 45
+
+    def test_aguardando_within_period_included(self, tmp_path: Path) -> None:
+        """Aguardando Confirmação within N days is included in active recent."""
+        csv_path = _make_csv_fixture(tmp_path)
+        ref = datetime(2026, 3, 14)
+        apoiadores = [
+            _make_apoiador(
+                nome="Pending Guy",
+                status="Aguardando Confirmação",
+                recompensa=5,
+                data_ultima_mudanca=datetime(2026, 3, 5),
+            ),
+        ]
+        uc, yaml_writer, _ = _make_use_case(apoiadores)
+        uc.execute(csv_path, tmp_path, ref)
+
+        result = yaml_writer.written_data
+        assert result["apoia-se"]["total_ativos_recentes"] == 1
 
 
 class TestStatusToKey:

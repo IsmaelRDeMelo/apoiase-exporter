@@ -82,10 +82,13 @@ class DashboardTab:
         )
         stats_frame.pack(fill="x", padx=16, pady=(16, 0))
 
+        dias = apoia.get("dias_filtro", 30)
+
         cards = [
             ("Apoiadores Ativos", apoia.get("total_apoiadores", 0), self._colors["accent"]),
             ("Pendentes", apoia.get("total_pendente", 0), "#FF9800"),
             ("Inadimplentes", apoia.get("total_inadimplente", 0), self._colors["error"]),
+            (f"Ativos ({dias}d)", apoia.get("total_ativos_recentes", 0), "#29B6F6"),
             ("Recebido (mês atual)", f"R$ {apoia.get('total_recebido_mes_atual', 0):,.2f}", self._colors["success"]),
             ("Recebido (mês anterior)", f"R$ {apoia.get('total_recebido_mes_anterior', 0):,.2f}", self._colors["text_secondary"]),
         ]
@@ -152,6 +155,7 @@ class DashboardTab:
             "apoiadores_com_status_pendente": ("Pendentes", "#FF9800"),
             "apoiadores_com_status_inadimplente": ("Inadimplentes", self._colors["error"]),
             "apoiadores_com_status_aguardando_confirmacao": ("Aguardando", "#FF9800"),
+            "apoiadores_ativos_ultimos_n_dias": ("Ativos Recentes", "#29B6F6"),
         }
 
         for status_key, (display_name, color) in status_labels.items():

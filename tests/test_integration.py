@@ -95,15 +95,15 @@ class TestIntegration:
         assert "5-pesetas" in apoia["recompensas"]
         assert "18-pesetas" in apoia["recompensas"]
 
-        # Names are init-capped
+        # Names use new formatting: abbreviated middles, particles removed
         r5 = apoia["recompensas"]["5-pesetas"]
-        assert "Alice Silva" in r5["apoiadores_com_status_ativo"]
+        assert "Alice S. Silva" in r5["apoiadores_com_status_ativo"]
         assert "Bob Lima" in r5["apoiadores_com_status_ativo"]
         assert "Zé Silva" in r5["apoiadores_com_status_inadimplente"]
 
         r18 = apoia["recompensas"]["18-pesetas"]
-        assert "Diana Costa" in r18["apoiadores_com_status_ativo"]
-        assert "Carol Dias" in r18["apoiadores_com_status_pendente"]
+        assert "Diana G. Costa" in r18["apoiadores_com_status_ativo"]
+        assert "Carol F. Dias" in r18["apoiadores_com_status_pendente"]
 
         # Validate JSON metadata
         with open(json_path, "r", encoding="utf-8") as f:

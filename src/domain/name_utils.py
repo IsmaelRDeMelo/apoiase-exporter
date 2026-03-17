@@ -1,36 +1,56 @@
 """Utility functions for name processing."""
 
+# Portuguese particles to filter out of names
+_PARTICLES = {"de", "do", "dos", "da", "das", "di", "du"}
 
-def extract_short_name(full_name: str) -> str:
-    """Extract a short name (first + last) from a full name, in Init Cap.
 
-    If the name has only one word, return it title-cased.
-    If the name has multiple words, return the first and last word, title-cased.
+def format_display_name(full_name: str) -> str:
+    """Format a full name for display: First M. M. Last (no particles).
+
+    Rules:
+    1. Strip whitespace, split into tokens.
+    2. Remove Portuguese particles (de, do, dos, da, das, di, du).
+    3. Single token → title-cased.
+    4. Two tokens → "First Last", title-cased.
+    5. Three+ tokens → "First M. M. Last" with abbreviated middles.
 
     Args:
         full_name: The full name string.
 
     Returns:
-        Short name with first and last name only, in Init Cap format.
+        Formatted display name.
 
     Examples:
-        >>> extract_short_name("Fabio Akita")
+        >>> format_display_name("Antonio Ismael Rodrigues de Melo")
+        'Antonio I. R. Melo'
+        >>> format_display_name("Fabio Akita")
         'Fabio Akita'
-        >>> extract_short_name("guilherme silva")
-        'Guilherme Silva'
-        >>> extract_short_name("GABRIEL MENDES")
-        'Gabriel Mendes'
-        >>> extract_short_name("Marvin")
+        >>> format_display_name("Marvin")
         'Marvin'
-        >>> extract_short_name("  Rafa  ")
-        'Rafa'
+        >>> format_display_name("guilherme da silva")
+        'Guilherme Silva'
     """
     name = full_name.strip()
     if not name:
         return ""
 
-    parts = name.split()
-    if len(parts) <= 2:
-        return " ".join(parts).title()
+    tokens = name.split()
+    # Filter out particles (case-insensitive)
+    filtered = [t for t in tokens if t.lower() not in _PARTICLES]
 
-    return f"{parts[0]} {parts[-1]}".title()
+    if not filtered:
+        return ""
+
+    if len(filtered) == 1:
+        return filtered[0].title()
+
+    if len(filtered) == 2:
+        return f"{filtered[0].title()} {filtered[1].title()}"
+
+    # 3+ tokens: First + abbreviated middles + Last
+    first = filtered[0].title()
+    last = filtered[-1].title()
+    middle_tokens = filtered[1:-1]
+    middles = [f"{m[0].upper()}." for m in middle_tokens]
+
+    return f"{first} {' '.join(middles)} {last}"
