@@ -39,10 +39,13 @@ class PolarsCSVReader(DataReaderPort):
             columns=REQUIRED_COLUMNS,
             schema_overrides={
                 "Valor": pl.Float64,
-                "Recompensa": pl.Int64,
                 "Apoios Efetuados": pl.Int64,
                 "Total Apoiado": pl.Float64,
             },
+        )
+        # Cast Recompensa to Int64 explicitly after fill to avoid NaN→float promotion
+        df = df.with_columns(
+            pl.col("Recompensa").cast(pl.Float64).fill_null(0).cast(pl.Int64)
         )
 
         apoiadores: list[Apoiador] = []

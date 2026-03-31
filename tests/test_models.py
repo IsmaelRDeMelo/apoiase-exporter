@@ -72,23 +72,22 @@ class TestRecompensaGroup:
     def test_default_values(self) -> None:
         """Test that default values are empty strings."""
         group = RecompensaGroup()
+        assert group.nomes_unicos == ""
         assert group.apoiadores_com_status_ativo == ""
-        assert group.apoiadores_com_status_pendente == ""
-        assert group.apoiadores_com_status_inadimplente == ""
-        assert group.apoiadores_com_status_aguardando_confirmacao == ""
+        assert group.apoiadores_com_outros_status == ""
         assert group.apoiadores_ativos_ultimos_n_dias == ""
 
     def test_custom_values(self) -> None:
         """Test creating group with custom values."""
         group = RecompensaGroup(
             apoiadores_com_status_ativo="Alice, Bob",
-            apoiadores_com_status_pendente="Charlie",
+            apoiadores_com_outros_status="Charlie",
         )
         assert group.apoiadores_com_status_ativo == "Alice, Bob"
-        assert group.apoiadores_com_status_pendente == "Charlie"
+        assert group.apoiadores_com_outros_status == "Charlie"
 
     def test_active_recent_field(self) -> None:
-        """Test the new active-recent field."""
+        """Test the active-recent field."""
         group = RecompensaGroup(
             apoiadores_ativos_ultimos_n_dias="Fabio Akita, Marvin",
         )
@@ -99,7 +98,7 @@ class TestApoiaSummary:
     """Tests for the ApoiaSummary dataclass."""
 
     def test_default_values(self) -> None:
-        """Test that default values are zeros and empty dict."""
+        """Test that default values are zeros and empty fields."""
         summary = ApoiaSummary()
         assert summary.total_apoiadores == 0
         assert summary.total_pendente == 0
@@ -108,18 +107,31 @@ class TestApoiaSummary:
         assert summary.total_recebido_mes_anterior == 0.0
         assert summary.total_ativos_recentes == 0
         assert summary.dias_filtro == 30
-        assert summary.recompensas == {}
+        assert summary.sumario_ativos == ""
+        assert summary.sumario_ativos_recentes == ""
+        assert summary.sumario_lista_completa == ""
 
-    def test_with_recompensas(self) -> None:
-        """Test summary with recompensa groups."""
+    def test_tier_baixo_default(self) -> None:
+        """Test that tier_baixo defaults to an empty RecompensaGroup."""
+        summary = ApoiaSummary()
+        assert isinstance(summary.tier_baixo, RecompensaGroup)
+        assert summary.tier_baixo.nomes_unicos == ""
+
+    def test_tier_premium_default(self) -> None:
+        """Test that tier_premium defaults to an empty RecompensaGroup."""
+        summary = ApoiaSummary()
+        assert isinstance(summary.tier_premium, RecompensaGroup)
+        assert summary.tier_premium.apoiadores_com_status_ativo == ""
+
+    def test_with_tiers(self) -> None:
+        """Test summary with tier groups set."""
         group = RecompensaGroup(apoiadores_com_status_ativo="Fabio Akita")
         summary = ApoiaSummary(
             total_apoiadores=1,
-            recompensas={5: group},
+            tier_baixo=group,
         )
         assert summary.total_apoiadores == 1
-        assert 5 in summary.recompensas
-        assert summary.recompensas[5].apoiadores_com_status_ativo == "Fabio Akita"
+        assert summary.tier_baixo.apoiadores_com_status_ativo == "Fabio Akita"
 
     def test_custom_days_filter(self) -> None:
         """Test summary with custom days filter."""
