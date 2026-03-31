@@ -5,7 +5,12 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from src.domain.models import ApoiaSummary, Apoiador, RecompensaGroup
+from src.domain.models import (
+    TIER_PREMIUM_THRESHOLD,
+    ApoiaSummary,
+    Apoiador,
+    RecompensaGroup,
+)
 from src.domain.name_utils import format_display_name
 from src.domain.ports import ArtifactWriterPort, DataReaderPort
 
@@ -14,6 +19,10 @@ STATUS_ATIVO = "Ativo"
 STATUS_DESATIVADO = "Desativado"
 STATUS_INADIMPLENTE = "Inadimplente"
 STATUS_AGUARDANDO = "Aguardando Confirmação"
+
+# Tier keys used in YAML output
+TIER_LOW_KEY = "0-59-pesetas"
+TIER_PREMIUM_KEY = "60-pesetas"
 
 
 class TransformApoiadoresUseCase:
@@ -113,6 +122,11 @@ class TransformApoiadoresUseCase:
                 continue
         return max_serial + 1
 
+    @staticmethod
+    def _is_premium(recompensa: int) -> bool:
+        """Return True if the recompensa value belongs to the premium tier (≥60)."""
+        return recompensa >= TIER_PREMIUM_THRESHOLD
+
     def _build_summary(
         self,
         apoiadores: list[Apoiador],
@@ -120,6 +134,14 @@ class TransformApoiadoresUseCase:
         days_filter: int = 30,
     ) -> ApoiaSummary:
         """Build the aggregated summary from raw supporter data.
+
+        Supporters are bucketed into two tiers:
+        - tier_baixo:   recompensa 0–59
+        - tier_premium: recompensa 60+
+
+        Within each tier, names are deduplicated by display name. The
+        ``apoiadores_ativos_ultimos_n_dias`` list contains only non-ATIVO
+        supporters who changed status within the last *days_filter* days.
 
         Args:
             apoiadores: List of all supporters.
@@ -143,18 +165,27 @@ class TransformApoiadoresUseCase:
 
         cutoff_date = reference_date - timedelta(days=days_filter)
 
-        # Accumulate (name, date) tuples per recompensa+status for sorting
-        recompensa_groups: dict[int, dict[str, list[tuple[str, datetime]]]] = (
-            defaultdict(lambda: defaultdict(list))
-        )
-
-        # Separate accumulator for the "active recent" virtual status
-        recent_by_recompensa: dict[int, list[tuple[str, datetime]]] = (
-            defaultdict(list)
-        )
+        # Per-tier accumulators: tier_key -> status_key -> list[(name, date)]
+        # Using ordered insertion; dedup happens at flush time.
+        tier_status: dict[str, dict[str, list[tuple[str, datetime]]]] = {
+            TIER_LOW_KEY: defaultdict(list),
+            TIER_PREMIUM_KEY: defaultdict(list),
+        }
+        # Per-tier recently-active (non-ATIVO within window)
+        tier_recent: dict[str, list[tuple[str, datetime]]] = {
+            TIER_LOW_KEY: [],
+            TIER_PREMIUM_KEY: [],
+        }
+        # Seen-name sets for dedup — (tier_key, status_key) -> set[name]
+        seen_status: dict[tuple[str, str], set[str]] = defaultdict(set)
+        # Seen-name set for recently-active dedup — tier_key -> set[name]
+        seen_recent: dict[str, set[str]] = {
+            TIER_LOW_KEY: set(),
+            TIER_PREMIUM_KEY: set(),
+        }
 
         for ap in apoiadores:
-            # Counts by status
+            # --- Global counters by status ---
             if ap.status == STATUS_ATIVO:
                 summary.total_apoiadores += 1
             elif ap.status == STATUS_AGUARDANDO:
@@ -162,7 +193,7 @@ class TransformApoiadoresUseCase:
             elif ap.status == STATUS_INADIMPLENTE:
                 summary.total_inadimplente += 1
 
-            # Monthly totals for active and pending
+            # --- Monthly monetary totals ---
             if ap.status in (STATUS_ATIVO, STATUS_AGUARDANDO):
                 if ap.data_ultima_mudanca is not None:
                     dt = ap.data_ultima_mudanca
@@ -171,16 +202,19 @@ class TransformApoiadoresUseCase:
                     elif dt.month == prev_month and dt.year == prev_year:
                         summary.total_recebido_mes_anterior += ap.valor
 
-            # Build recompensa groups (name, date) for date-based sorting
             display_name = format_display_name(ap.nome)
-            status_key = self._status_to_key(ap.status)
             sort_date = ap.data_ultima_mudanca or datetime.max
-            if status_key:
-                recompensa_groups[ap.recompensa][status_key].append(
-                    (display_name, sort_date)
-                )
+            tier_key = TIER_PREMIUM_KEY if self._is_premium(ap.recompensa) else TIER_LOW_KEY
 
-            # Active recent: Ativo always included; other statuses only within N days
+            # --- Status groups (with dedup) ---
+            status_key = self._status_to_key(ap.status)
+            if status_key:
+                seen_key = (tier_key, status_key)
+                if display_name not in seen_status[seen_key]:
+                    seen_status[seen_key].add(display_name)
+                    tier_status[tier_key][status_key].append((display_name, sort_date))
+
+            # --- Active-recent counter (ATIVO always counted) ---
             is_ativo = ap.status == STATUS_ATIVO
             within_period = (
                 ap.data_ultima_mudanca is not None
@@ -188,44 +222,131 @@ class TransformApoiadoresUseCase:
             )
             if is_ativo or within_period:
                 summary.total_ativos_recentes += 1
-                recent_by_recompensa[ap.recompensa].append(
-                    (display_name, sort_date)
-                )
 
-        # Sort by date (oldest first) and build RecompensaGroup objects
-        all_recompensa_keys = set(recompensa_groups.keys()) | set(
-            recent_by_recompensa.keys()
-        )
+            # --- Recently-active list: non-ATIVO only within window (with dedup) ---
+            if not is_ativo and within_period:
+                if display_name not in seen_recent[tier_key]:
+                    seen_recent[tier_key].add(display_name)
+                    tier_recent[tier_key].append((display_name, sort_date))
 
-        for recompensa_value in sorted(all_recompensa_keys):
-            group = RecompensaGroup()
+        # --- Build RecompensaGroup for each tier ---
+        for tier_key, status_dict in tier_status.items():
+            group = self._build_group(status_dict, tier_recent[tier_key])
+            if tier_key == TIER_LOW_KEY:
+                summary.tier_baixo = group
+            else:
+                summary.tier_premium = group
 
-            # Standard status groups
-            if recompensa_value in recompensa_groups:
-                status_dict = recompensa_groups[recompensa_value]
-                for status_key, name_date_pairs in status_dict.items():
-                    sorted_pairs = sorted(name_date_pairs, key=lambda x: x[1])
-                    sorted_names = [name for name, _ in sorted_pairs]
-                    setattr(group, status_key, ", ".join(sorted_names))
-
-            # Active recent group
-            if recompensa_value in recent_by_recompensa:
-                pairs = recent_by_recompensa[recompensa_value]
-                sorted_pairs = sorted(pairs, key=lambda x: x[1])
-                sorted_names = [name for name, _ in sorted_pairs]
-                group.apoiadores_ativos_ultimos_n_dias = ", ".join(
-                    sorted_names
-                )
-
-            summary.recompensas[recompensa_value] = group
+        # --- Build sumario fields ---
+        summary = self._build_sumario(summary)
 
         # Round monetary values
-        summary.total_recebido_mes_atual = round(
-            summary.total_recebido_mes_atual, 2
+        summary.total_recebido_mes_atual = round(summary.total_recebido_mes_atual, 2)
+        summary.total_recebido_mes_anterior = round(summary.total_recebido_mes_anterior, 2)
+
+        return summary
+
+    @staticmethod
+    def _build_group(
+        status_dict: dict[str, list[tuple[str, datetime]]],
+        recent_pairs: list[tuple[str, datetime]],
+    ) -> RecompensaGroup:
+        """Build a RecompensaGroup from pre-bucketed (name, date) pairs.
+
+        Args:
+            status_dict: Mapping from status field name to (name, date) pairs.
+            recent_pairs: (name, date) pairs for the recently-active list.
+
+        Returns:
+            Populated RecompensaGroup.
+        """
+        group = RecompensaGroup()
+
+        # Ativo names
+        ativo_pairs = sorted(
+            status_dict.get("apoiadores_com_status_ativo", []), key=lambda x: x[1]
         )
-        summary.total_recebido_mes_anterior = round(
-            summary.total_recebido_mes_anterior, 2
-        )
+        group.apoiadores_com_status_ativo = ", ".join(n for n, _ in ativo_pairs)
+
+        # Other statuses merged into one field
+        other_pairs: list[tuple[str, datetime]] = []
+        seen_other: set[str] = set()
+        for key in ("apoiadores_com_status_pendente", "apoiadores_com_status_inadimplente"):
+            for name, date in status_dict.get(key, []):
+                if name not in seen_other:
+                    seen_other.add(name)
+                    other_pairs.append((name, date))
+        other_pairs_sorted = sorted(other_pairs, key=lambda x: x[1])
+        group.apoiadores_com_outros_status = ", ".join(n for n, _ in other_pairs_sorted)
+
+        # nomes_unicos = union of ativo + outros, deduped, sorted by date
+        all_pairs: list[tuple[str, datetime]] = []
+        seen_all: set[str] = set()
+        for name, date in (ativo_pairs + other_pairs_sorted):
+            if name not in seen_all:
+                seen_all.add(name)
+                all_pairs.append((name, date))
+        all_sorted = sorted(all_pairs, key=lambda x: x[1])
+        group.nomes_unicos = ", ".join(n for n, _ in all_sorted)
+
+        # Recently active
+        recent_sorted = sorted(recent_pairs, key=lambda x: x[1])
+        group.apoiadores_ativos_ultimos_n_dias = ", ".join(n for n, _ in recent_sorted)
+
+        return group
+
+    @staticmethod
+    def _build_sumario(summary: ApoiaSummary) -> ApoiaSummary:
+        """Populate the sumario fields by combining both tiers.
+
+        Args:
+            summary: ApoiaSummary with tier_baixo and tier_premium already built.
+
+        Returns:
+            The same summary object with sumario fields filled.
+        """
+        # Unique ativos from both tiers (preserve order: baixo first)
+        seen: set[str] = set()
+        ativos: list[str] = []
+        for name in [
+            n.strip()
+            for src in (
+                summary.tier_baixo.apoiadores_com_status_ativo,
+                summary.tier_premium.apoiadores_com_status_ativo,
+            )
+            for n in src.split(", ")
+            if src
+        ]:
+            if name and name not in seen:
+                seen.add(name)
+                ativos.append(name)
+        summary.sumario_ativos = ", ".join(ativos)
+
+        # Unique recently-active from both tiers
+        seen_r: set[str] = set()
+        recentes: list[str] = []
+        for name in [
+            n.strip()
+            for src in (
+                summary.tier_baixo.apoiadores_ativos_ultimos_n_dias,
+                summary.tier_premium.apoiadores_ativos_ultimos_n_dias,
+            )
+            for n in src.split(", ")
+            if src
+        ]:
+            if name and name not in seen_r:
+                seen_r.add(name)
+                recentes.append(name)
+        summary.sumario_ativos_recentes = ", ".join(recentes)
+
+        # lista_completa = union(ativos + recentes), deduped
+        seen_l: set[str] = set(ativos)
+        lista = list(ativos)
+        for name in recentes:
+            if name and name not in seen_l:
+                seen_l.add(name)
+                lista.append(name)
+        summary.sumario_lista_completa = ", ".join(lista)
 
         return summary
 
@@ -254,33 +375,32 @@ class TransformApoiadoresUseCase:
             summary: The computed summary.
 
         Returns:
-            Dictionary matching the YAML structure from the spec.
+            Dictionary matching the new two-tier YAML structure.
         """
-        recompensas_dict: dict[str, dict[str, str]] = {}
-        for recompensa_value, group in sorted(summary.recompensas.items()):
-            pesetas_key = f"{recompensa_value}-pesetas"
-            group_dict: dict[str, str] = {}
+        def _group_to_dict(group: RecompensaGroup) -> dict:
+            d: dict[str, str] = {}
+            if group.nomes_unicos:
+                d["nomes_unicos"] = group.nomes_unicos
             if group.apoiadores_com_status_ativo:
-                group_dict["apoiadores_com_status_ativo"] = (
-                    group.apoiadores_com_status_ativo
-                )
-            if group.apoiadores_com_status_pendente:
-                group_dict["apoiadores_com_status_pendente"] = (
-                    group.apoiadores_com_status_pendente
-                )
-            if group.apoiadores_com_status_inadimplente:
-                group_dict["apoiadores_com_status_inadimplente"] = (
-                    group.apoiadores_com_status_inadimplente
-                )
-            if group.apoiadores_com_status_aguardando_confirmacao:
-                group_dict["apoiadores_com_status_aguardando_confirmacao"] = (
-                    group.apoiadores_com_status_aguardando_confirmacao
-                )
+                d["apoiadores_com_status_ativo"] = group.apoiadores_com_status_ativo
+            if group.apoiadores_com_outros_status:
+                d["apoiadores_com_outros_status"] = group.apoiadores_com_outros_status
             if group.apoiadores_ativos_ultimos_n_dias:
-                group_dict["apoiadores_ativos_ultimos_n_dias"] = (
-                    group.apoiadores_ativos_ultimos_n_dias
-                )
-            recompensas_dict[pesetas_key] = group_dict
+                d["apoiadores_ativos_ultimos_n_dias"] = group.apoiadores_ativos_ultimos_n_dias
+            return d
+
+        recompensas_dict: dict[str, dict] = {
+            TIER_LOW_KEY: _group_to_dict(summary.tier_baixo),
+            TIER_PREMIUM_KEY: _group_to_dict(summary.tier_premium),
+        }
+
+        sumario_dict: dict[str, str] = {}
+        if summary.sumario_ativos:
+            sumario_dict["ativos"] = summary.sumario_ativos
+        if summary.sumario_ativos_recentes:
+            sumario_dict["ativos_recentes"] = summary.sumario_ativos_recentes
+        if summary.sumario_lista_completa:
+            sumario_dict["lista_completa"] = summary.sumario_lista_completa
 
         return {
             "apoia-se": {
@@ -292,6 +412,7 @@ class TransformApoiadoresUseCase:
                 "total_ativos_recentes": summary.total_ativos_recentes,
                 "dias_filtro": summary.dias_filtro,
                 "recompensas": recompensas_dict,
+                "sumario": sumario_dict,
             }
         }
 

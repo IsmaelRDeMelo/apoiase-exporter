@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+# Recompensa tier threshold: 0–59 = baixo, 60+ = premium
+TIER_PREMIUM_THRESHOLD = 60
+
 
 @dataclass(frozen=True)
 class Apoiador:
@@ -22,12 +25,11 @@ class Apoiador:
 
 @dataclass
 class RecompensaGroup:
-    """Groups supporters by status within a reward tier."""
+    """Groups supporters by status within a unified reward tier."""
 
+    nomes_unicos: str = ""
     apoiadores_com_status_ativo: str = ""
-    apoiadores_com_status_pendente: str = ""
-    apoiadores_com_status_inadimplente: str = ""
-    apoiadores_com_status_aguardando_confirmacao: str = ""
+    apoiadores_com_outros_status: str = ""
     apoiadores_ativos_ultimos_n_dias: str = ""
 
 
@@ -42,4 +44,12 @@ class ApoiaSummary:
     total_recebido_mes_anterior: float = 0.0
     total_ativos_recentes: int = 0
     dias_filtro: int = 30
-    recompensas: dict[int, RecompensaGroup] = field(default_factory=dict)
+
+    # Two unified tiers replacing per-value buckets
+    tier_baixo: RecompensaGroup = field(default_factory=RecompensaGroup)   # 0–59
+    tier_premium: RecompensaGroup = field(default_factory=RecompensaGroup)  # 60+
+
+    # Summary section
+    sumario_ativos: str = ""           # unique active names from both tiers
+    sumario_ativos_recentes: str = ""  # unique recently-active names from both tiers
+    sumario_lista_completa: str = ""   # union(ativos + ativos_recentes), deduplicated

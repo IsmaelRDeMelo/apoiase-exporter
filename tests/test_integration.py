@@ -91,19 +91,29 @@ class TestIntegration:
         # Previous month: A002 (15) = 15
         assert apoia["total_recebido_mes_anterior"] == 15.0
 
-        # Recompensa keys use pesetas format
-        assert "5-pesetas" in apoia["recompensas"]
-        assert "18-pesetas" in apoia["recompensas"]
+        # New two-tier structure
+        assert "0-59-pesetas" in apoia["recompensas"]
+        assert "60-pesetas" in apoia["recompensas"]
 
-        # Names use new formatting: abbreviated middles, particles removed
-        r5 = apoia["recompensas"]["5-pesetas"]
-        assert "Alice S. Silva" in r5["apoiadores_com_status_ativo"]
-        assert "Bob Lima" in r5["apoiadores_com_status_ativo"]
-        assert "Zé Silva" in r5["apoiadores_com_status_inadimplente"]
+        # All recompensas 5 and 18 land in tier_baixo (both < 60)
+        low = apoia["recompensas"]["0-59-pesetas"]
+        assert "Alice S. Silva" in low["apoiadores_com_status_ativo"]
+        assert "Bob Lima" in low["apoiadores_com_status_ativo"]
+        assert "Diana G. Costa" in low["apoiadores_com_status_ativo"]
+        # Inadimplente and Aguardando are in outros_status
+        assert "Zé Silva" in low["apoiadores_com_outros_status"]
+        assert "Carol F. Dias" in low["apoiadores_com_outros_status"]
 
-        r18 = apoia["recompensas"]["18-pesetas"]
-        assert "Diana G. Costa" in r18["apoiadores_com_status_ativo"]
-        assert "Carol F. Dias" in r18["apoiadores_com_status_pendente"]
+        # nomes_unicos combines all
+        nomes = low["nomes_unicos"]
+        assert "Alice S. Silva" in nomes
+        assert "Bob Lima" in nomes
+
+        # sumario section
+        assert "sumario" in apoia
+        sumario = apoia["sumario"]
+        assert "Alice S. Silva" in sumario["ativos"]
+        assert "Bob Lima" in sumario["ativos"]
 
         # Validate JSON metadata
         with open(json_path, "r", encoding="utf-8") as f:
@@ -113,6 +123,7 @@ class TestIntegration:
         ids = [entry["id"] for entry in json_data]
         assert "A001" in ids
         assert "A005" in ids  # Even desativado is in metadata
+
 
     def test_artifacts_in_date_directory(
         self, integration_csv: Path, tmp_path: Path
